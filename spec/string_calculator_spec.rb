@@ -1,5 +1,5 @@
 require_relative '../lib/string_calculator'
-
+require 'benchmark'
 RSpec.describe StringCalculator do
     it "has a version number" do
       expect(StringCalculator::VERSION).not_to be nil
@@ -85,5 +85,117 @@ RSpec.describe StringCalculator do
           expect(StringCalculator.add("//+\n1+2+3")).to eq(6)
         end
       end
+
+      context "with large inputs" do
+        it "handles a long list of numbers efficiently" do
+          # Create a string with 10,000 numbers (1,2,3,1,2,3...)
+          numbers = (1..10_000).map { |i| i % 10 }.join(',')
+          
+          # Set a time threshold (adjust as needed)
+          time_threshold = 0.5 # seconds
+          
+          # Measure execution time
+          execution_time = Benchmark.realtime do
+            StringCalculator.add(numbers)
+          end
+          
+          # Verify the result is correct (sum of 0-9 repeated)
+          expect(StringCalculator.add(numbers)).to eq(45_000) # (0+1+2+...+9) * 1000
+          
+          # Verify it executes within the time threshold
+          expect(execution_time).to be < time_threshold
+        end
+        
+        it "processes a large input with custom delimiters efficiently" do
+          # Create a string with 1,000 numbers separated by a custom delimiter
+          numbers = "//;\n" + (1..1_000).map { |i| i % 10 }.join(';')
+          
+          time_threshold = 0.2 # seconds
+          
+          execution_time = Benchmark.realtime do
+            StringCalculator.add(numbers)
+          end
+          
+          expect(StringCalculator.add(numbers)).to eq(4_500) # (0+1+2+...+9) * 100
+          expect(execution_time).to be < time_threshold
+        end
+        
+        it "handles multiple complex delimiters with large input efficiently" do
+          # Create a string with multi-character delimiters
+          numbers = "//[***][%%%]\n" + (1..500).map { |i| i % 10 }.join('***')
+          # Add additional numbers with second delimiter
+          numbers += "%%%" + (1..500).map { |i| i % 10 }.join('%%%')
+          
+          time_threshold = 0.3 # seconds
+          
+          execution_time = Benchmark.realtime do
+            StringCalculator.add(numbers)
+          end
+          
+          expect(StringCalculator.add(numbers)).to eq(4_500) # (0+1+2+...+9) * 100
+          expect(execution_time).to be < time_threshold
+        end
+        
+        it "performs well with pathological input patterns" do
+          # Create a string with nested delimiters and edge cases
+          # This includes empty segments, whitespace, and non-numeric characters
+          numbers = "//[!@#]\n" + (1..300).map do |i|
+            i % 3 == 0 ? "!@#" : # Empty segment every 3rd position
+            i % 5 == 0 ? "#{i % 10} !@#" : # Whitespace before delimiter
+            i % 7 == 0 ? "#{i % 10}x!@#" : # Non-numeric character
+            "#{i % 10}!@#"
+          end.join
+          
+          time_threshold = 0.3 # seconds
+          
+          execution_time = Benchmark.realtime do
+            result = StringCalculator.add(numbers)
+            # We don't assert the exact result here since it depends on
+            # how the implementation handles the edge cases
+          end
+          
+          expect(execution_time).to be < time_threshold
+        end
+      end
+      
+      context "with memory usage considerations" do
+        it "doesn't consume excessive memory with very large inputs" do
+          # Skip this test in CI environments where memory might be constrained
+          skip "Memory test disabled in CI environment" if ENV['CI']
+          
+          # Create a very large input string (~5MB)
+          numbers = (1..500_000).map { |i| i % 10 }.join(',')
+          
+          # Ruby doesn't have a built-in way to measure memory usage directly
+          # But we can use ObjectSpace to get a rough idea
+          require 'objspace'
+          
+          GC.start # Force garbage collection before the test
+          memory_before = ObjectSpace.memsize_of_all
+          
+          result = StringCalculator.add(numbers)
+          
+          GC.start # Force garbage collection after the test
+          memory_after = ObjectSpace.memsize_of_all
+          
+          memory_used = memory_after - memory_before
+          
+          # The memory check is a bit fuzzy, so set a generous threshold
+          # This is mainly to catch significant regressions
+          expect(memory_used).to be < 20_000_000 # 20MB (adjust as needed)
+          
+          # Also verify the calculation is correct
+          expect(result).to eq(2_250_000) # (0+1+2+...+9) * 50000
+        end
+      end
+  
     end
   end
+
+
+
+# RSpec.describe StringCalculator, "performance" do
+#   describe ".add" do
+
+#   end
+# end
